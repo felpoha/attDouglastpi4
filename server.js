@@ -6,6 +6,13 @@ const fs = require("fs");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// aceitar JSON no body
+app.use(express.json());
+
+// users model and bcrypt
+const bcrypt = require("bcryptjs");
+const userModel = require("./models/userModel");
+
 // Garantir pasta de uploads
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
@@ -142,6 +149,38 @@ app.post("/upload", function (req, res) {
       })),
     });
   });
+});
+
+// Rota de cadastro de usuário
+app.post("/register", async (req, res) => {
+  try {
+    const { username, email, password } = req.body || {};
+    if (!username || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: "username, email e password são obrigatórios." });
+    }
+
+    // verificar existência
+    const existing = userModel.findByUsername(username);
+    if (existing) {
+      return res.status(400).json({ message: "Usuário já existe." });
+    }
+
+    // hashear a senha
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = userModel.addUser({ username, email, passwordHash });
+    return res
+      .status(201)
+      .json({
+        message: "Usuário criado.",
+        user: { id: user.id, username: user.username, email: user.email },
+      });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Erro no servidor." });
+  }
 });
 
 app.listen(PORT, () => {
