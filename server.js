@@ -4,14 +4,13 @@ const path = require("path");
 const fs = require("fs");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// aceitar JSON no body
+// parse JSON bodies
 app.use(express.json());
 
-// users model and bcrypt
+// user model and bcrypt
 const bcrypt = require("bcryptjs");
 const userModel = require("./models/userModel");
+const PORT = process.env.PORT || 3000;
 
 // Garantir pasta de uploads
 const uploadDir = path.join(__dirname, "uploads");
@@ -86,6 +85,48 @@ app.get("/upload", (req, res) => {
   }
 });
 
+// Rota de registro de usuários
+app.post("/register", async (req, res) => {
+  try {
+    const { username, email, password } = req.body || {};
+    if (!username || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: "username, email e password são obrigatórios." });
+    }
+
+    // verificar se usuário já existe
+    const existing = userModel.findByUsername(username);
+    if (existing) {
+      return res.status(409).json({ message: "Username já existe." });
+    }
+
+    // hashear a senha
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // salvar usuário (in-memory)
+    const saved = userModel.addUser({ username, email, passwordHash });
+
+    return res.status(201).json({
+      message: "Usuário criado com sucesso.",
+      user: { id: saved.id, username: saved.username, email: saved.email },
+    });
+  } catch (err) {
+    console.error("Erro /register", err);
+    return res.status(500).json({ message: "Erro interno." });
+  }
+});
+
+// Rota de debug: listar usuários (sem passwordHash)
+app.get("/users", (req, res) => {
+  try {
+    const list = userModel.listAll().map(({ passwordHash, ...user }) => user);
+    res.json({ users: list });
+  } catch (err) {
+    res.status(500).json({ message: "Erro ao listar usuários." });
+  }
+});
+
 // Servir arquivos enviados estaticamente em /uploads
 app.use("/uploads", express.static(uploadDir));
 
@@ -149,38 +190,6 @@ app.post("/upload", function (req, res) {
       })),
     });
   });
-});
-
-// Rota de cadastro de usuário
-app.post("/register", async (req, res) => {
-  try {
-    const { username, email, password } = req.body || {};
-    if (!username || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: "username, email e password são obrigatórios." });
-    }
-
-    // verificar existência
-    const existing = userModel.findByUsername(username);
-    if (existing) {
-      return res.status(400).json({ message: "Usuário já existe." });
-    }
-
-    // hashear a senha
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const user = userModel.addUser({ username, email, passwordHash });
-    return res
-      .status(201)
-      .json({
-        message: "Usuário criado.",
-        user: { id: user.id, username: user.username, email: user.email },
-      });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Erro no servidor." });
-  }
 });
 
 app.listen(PORT, () => {
